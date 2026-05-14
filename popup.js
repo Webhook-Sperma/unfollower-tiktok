@@ -1,99 +1,167 @@
-const status = document.getElementById('status');
-const details = document.getElementById('details');
-const unfollowBtn = document.getElementById('unfollowBtn');
-const unfollowFollowingCheckbox = document.getElementById('unfollowFollowing');
-const unfollowFriendCheckbox = document.getElementById('unfollowFriend');
+const mainBtn = document.getElementById('mainBtn');
+const btnText = document.getElementById('btnText');
+const statusMsg = document.getElementById('statusMsg');
+const phaseBadge = document.getElementById('phaseBadge');
+const statTotal = document.getElementById('statTotal');
+const statDone = document.getElementById('statDone');
+const statFriend = document.getElementById('statFriend');
+const barFill = document.getElementById('barFill');
+const progressLabel = document.getElementById('progressLabel');
+const progressPct = document.getElementById('progressPct');
 
-// Listen for progress messages from the content script
-chrome.runtime.onMessage.addListener((msg, sender) => {
+let state = {
+  following: true,
+  friend: false,
+  speed: 1500,
+  running: false,
+  total: 0
+};
+
+function toggleOption(type) {
+  if (state.running) return;
+  state[type] = !state[type];
+  const tog = document.getElementById('tog-' + type);
+  const opt = document.getElementById('opt-' + type);
+  tog.className = 'toggle' + (state[type] ? (type === 'friend' ? ' on pink' : ' on') : '');
+  opt.className = 'option' + (state[type] ? ' active' : '');
+}
+
+function setSpeed(ms) {
+  state.speed = ms;
+  document.querySelectorAll('.pill').forEach(p => {
+    p.className = 'pill' + (parseInt(p.dataset.speed) === ms ? ' active' : '');
+  });
+  // Notify content script of speed change if running
+  if (state.running) {
+    chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+      if (tabs[0]) chrome.tabs.sendMessage(tabs[0].id, { action: 'setSpeed', delay: ms });
+    });
+  }
+  // Update footer label
+  const delayEl = document.querySelector('.footer span');
+  const labels = { 800: '0.8s delay', 1500: '1.5s delay', 3000: '3s delay' };
+  if (delayEl) delayEl.textContent = labels[ms] || ms + 'ms delay';
+}
+
+function setPhase(phase) {
+  const labels = {
+    idle:        { text: 'idle',        cls: 'idle' },
+    scrolling:   { text: 'scrolling',   cls: 'scrolling' },
+    scanning:    { text: 'scanning',    cls: 'scanning' },
+    unfollowing: { text: 'running',     cls: 'unfollowing' },
+    done:        { text: 'done',        cls: 'done' },
+    error:       { text: 'error',       cls: 'unfollowing' }
+  };
+  const p = labels[phase] || labels.idle;
+  phaseBadge.innerHTML = `<span class="phase ${p.cls}"><span class="phase-dot"></span>${p.text}</span>`;
+}
+
+function setStatus(msg, type = '') {
+  statusMsg.textContent = msg;
+  statusMsg.className = 'status-msg' + (type ? ' ' + type : '');
+}
+
+function setProgress(done, total) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  barFill.style.width = pct + '%';
+  progressPct.textContent = pct + '%';
+  progressLabel.textContent = done > 0 ? `${done} of ${total} unfollowed` : 'Waiting to start';
+}
+
+function resetStats() {
+  statTotal.textContent = '—';
+  statDone.textContent = '0';
+  statFriend.textContent = '0';
+  barFill.style.width = '0%';
+  progressPct.textContent = '0%';
+  progressLabel.textContent = 'Starting...';
+}
+
+function setRunning(running) {
+  state.running = running;
+  mainBtn.disabled = running;
+  mainBtn.className = 'main-btn' + (running ? ' running' : '');
+  if (running) {
+    btnText.innerHTML = '<div class="spinner"></div>Unfollowing...';
+  } else {
+    btnText.textContent = 'Start Auto Unfollow';
+  }
+}
+
+// Listen for messages from content script
+chrome.runtime.onMessage.addListener((msg) => {
   if (!msg || !msg.action) return;
-  if (msg.action === 'progress') {
-    // Check if it's a string message (like "Loading all followers...") or a count
-    if (typeof msg.message === 'string') {
-      status.textContent = msg.message;
-    } else if (typeof msg.count === 'number') {
-      // Display separate counts if available
-      if (msg.followingCount !== undefined && msg.friendCount !== undefined) {
-        status.textContent = `Following: ${msg.followingCount} | Friend: ${msg.friendCount}`;
-      } else {
-        status.textContent = `Unfollowed: ${msg.count}`;
-      }
-    }
-    status.style.color = '#ff9800';
+
+  if (msg.action === 'phase') {
+    setPhase(msg.phase);
+    if (msg.message) setStatus(msg.message, 'loading');
+
   } else if (msg.action === 'totalFound') {
-    status.textContent = `Found: ${msg.count} followers`;
-    status.style.color = '#2196F3';
-    // Show filtered count details with separate counts
-    if (msg.candidates) {
-      let detailText = `Scanned: ${msg.candidates} buttons | Filtered: ${msg.count}`;
-      if (msg.followingCount !== undefined && msg.friendCount !== undefined) {
-        detailText += ` (Following: ${msg.followingCount} | Friend: ${msg.friendCount})`;
-      }
-      details.textContent = detailText;
-    }
+    state.total = msg.count;
+    statTotal.textContent = msg.count;
+    setStatus(`Found ${msg.count} accounts — starting...`, 'loading');
+    setPhase('unfollowing');
+
+  } else if (msg.action === 'progress') {
+    const done = (msg.followingCount || 0) + (msg.friendCount || 0);
+    statDone.textContent = msg.followingCount || 0;
+    statFriend.textContent = msg.friendCount || 0;
+    setProgress(done, state.total);
+    setStatus(`Unfollowing... ${done}/${state.total}`, 'loading');
+
   } else if (msg.action === 'done') {
-    // Display final counts separately
-    if (msg.followingCount !== undefined && msg.friendCount !== undefined) {
-      status.textContent = `Done — Following: ${msg.followingCount} | Friend: ${msg.friendCount}`;
-    } else {
-      status.textContent = `Done — unfollowed ${msg.count}`;
-    }
-    status.style.color = '#4CAF50';
-    unfollowBtn.disabled = false;
-    unfollowBtn.textContent = 'Start Auto Unfollow';
+    const fol = msg.followingCount || 0;
+    const fri = msg.friendCount || 0;
+    const total = fol + fri;
+    statDone.textContent = fol;
+    statFriend.textContent = fri;
+    setProgress(total, total);
+    setStatus(`Done — ${total} unfollowed ✓`, 'done');
+    setPhase('done');
+    setRunning(false);
   }
 });
 
-unfollowBtn.addEventListener('click', () => {
-  // Validate that at least one option is selected
-  if (!unfollowFollowingCheckbox.checked && !unfollowFriendCheckbox.checked) {
-    status.textContent = 'Please select at least one option';
-    status.style.color = '#f44336';
+mainBtn.addEventListener('click', () => {
+  if (!state.following && !state.friend) {
+    setStatus('Select at least one option above', 'error');
     return;
   }
 
-  status.textContent = 'Unfollowed: 0';
-  status.style.color = '#25f4ee';
-  details.textContent = '';
-  unfollowBtn.disabled = true;
-  unfollowBtn.textContent = 'Unfollowing...';
+  resetStats();
+  setRunning(true);
+  setPhase('scrolling');
+  setStatus('Auto-scrolling to load accounts...', 'loading');
 
-  // Send message to content script to start the process with options
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0]?.url?.includes('tiktok.com')) {
-      chrome.tabs.sendMessage(
-        tabs[0].id,
-        {
-          action: 'startUnfollow',
-          unfollowFollowing: unfollowFollowingCheckbox.checked,
-          unfollowFriend: unfollowFriendCheckbox.checked
-        },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            status.textContent = 'Error: ' + chrome.runtime.lastError.message;
-            status.style.color = '#f44336';
-            unfollowBtn.disabled = false;
-            unfollowBtn.textContent = 'Start Auto Unfollow';
-            return;
-          }
-
-          if (response?.success) {
-            // Final response (in case content script finished quickly)
-            status.textContent = response.message + (response.count ? ` (${response.count})` : '');
-            status.style.color = '#4CAF50';
-          } else {
-            status.textContent = 'Error: ' + (response?.error || 'Unknown');
-            status.style.color = '#f44336';
-            unfollowBtn.disabled = false;
-            unfollowBtn.textContent = 'Start Auto Unfollow';
-          }
-        }
-      );
-    } else {
-      status.textContent = 'Please open TikTok first';
-      status.style.color = '#f44336';
-      unfollowBtn.disabled = false;
-      unfollowBtn.textContent = 'Start Auto Unfollow';
+    if (!tabs[0]?.url?.includes('tiktok.com')) {
+      setStatus('Open TikTok first!', 'error');
+      setPhase('error');
+      setRunning(false);
+      return;
     }
+
+    chrome.tabs.sendMessage(
+      tabs[0].id,
+      {
+        action: 'startUnfollow',
+        unfollowFollowing: state.following,
+        unfollowFriend: state.friend,
+        delay: state.speed
+      },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          setStatus('Error: ' + chrome.runtime.lastError.message, 'error');
+          setPhase('error');
+          setRunning(false);
+          return;
+        }
+        if (response && !response.success && response.error) {
+          setStatus('Error: ' + response.error, 'error');
+          setPhase('error');
+          setRunning(false);
+        }
+      }
+    );
   });
 });

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TikTok Auto Unfollow",
-  "version": "1.0",
-  "description": "Automatically unfollow users on TikTok one by one.",
+  "version": "2.0",
+  "description": "Bulk unfollow TikTok accounts — fast, safe, with real-time progress.",
   "permissions": ["activeTab", "scripting"],
   "action": {
     "default_popup": "popup.html",

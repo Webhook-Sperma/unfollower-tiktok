@@ -1,96 +1,543 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --tt-cyan: #25f4ee;
+      --tt-pink: #fe2c55;
+      --tt-dark: #121212;
+      --tt-surface: #1a1a1a;
+      --tt-card: #222222;
+      --tt-border: rgba(255,255,255,0.08);
+      --tt-text: #f1f1f1;
+      --tt-muted: #888;
+      --tt-dim: #555;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      width: 350px;
-      padding: 15px;
-      font-family: Arial, sans-serif;
-      background-color: #f5f5f5;
+      width: 320px;
+      background: var(--tt-dark);
+      font-family: 'DM Sans', sans-serif;
+      color: var(--tt-text);
+      overflow: hidden;
     }
-    button {
-      width: 100%;
-      padding: 12px;
-      background-color: #25f4ee;
-      color: #000;
-      border: none;
-      border-radius: 4px;
-      font-weight: bold;
-      font-size: 16px;
-      cursor: pointer;
-      transition: background-color 0.3s;
-      margin-top: 10px;
-    }
-    button:hover {
-      background-color: #00d4cc;
-    }
-    button:active {
-      background-color: #00b8ad;
-    }
-    button:disabled {
-      background-color: #ccc;
-      cursor: not-allowed;
-    }
-    #status {
-      margin-top: 10px;
-      padding: 10px;
-      background-color: #fff;
-      border-radius: 4px;
-      text-align: center;
-      font-size: 14px;
-      color: #666;
-    }
-    #details {
-      margin-top: 10px;
-      padding: 8px;
-      background-color: #fff;
-      border-radius: 4px;
-      text-align: center;
-      font-size: 12px;
-      color: #999;
-      line-height: 1.5;
-    }
-    .options {
-      margin-top: 10px;
-      padding: 10px;
-      background-color: #fff;
-      border-radius: 4px;
-      border: 1px solid #ddd;
-    }
-    .option-label {
+
+    /* Header */
+    .header {
+      padding: 16px 16px 12px;
       display: flex;
       align-items: center;
-      font-size: 13px;
-      color: #333;
+      gap: 10px;
+      border-bottom: 1px solid var(--tt-border);
+    }
+
+    .logo {
+      width: 32px;
+      height: 32px;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .logo-shape {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+    }
+
+    .logo-shape.cyan {
+      background: var(--tt-cyan);
+      top: 2px; left: 2px;
+    }
+
+    .logo-shape.pink {
+      background: var(--tt-pink);
+      bottom: 2px; right: 2px;
+    }
+
+    .logo-shape.dark {
+      background: var(--tt-dark);
+      top: 6px; left: 6px;
+      width: 20px; height: 20px;
+      border-radius: 6px;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-shape.dark svg {
+      width: 14px; height: 14px;
+      fill: white;
+    }
+
+    .header-text h1 {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      color: var(--tt-text);
+    }
+
+    .header-text p {
+      font-size: 11px;
+      color: var(--tt-muted);
+      margin-top: 1px;
+    }
+
+    .badge {
+      margin-left: auto;
+      background: rgba(37,244,238,0.12);
+      color: var(--tt-cyan);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 20px;
+      letter-spacing: 0.3px;
+    }
+
+    /* Body */
+    .body { padding: 14px 16px; }
+
+    /* Options */
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tt-muted);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
       margin-bottom: 8px;
-      cursor: pointer;
     }
-    .option-label input[type="checkbox"] {
-      margin-right: 8px;
-      cursor: pointer;
-      width: 16px;
-      height: 16px;
+
+    .options {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
     }
-    .option-label:last-child {
-      margin-bottom: 0;
+
+    .option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--tt-card);
+      border: 1px solid var(--tt-border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .option:hover {
+      border-color: rgba(255,255,255,0.15);
+      background: #272727;
+    }
+
+    .option.active {
+      border-color: rgba(37,244,238,0.35);
+      background: rgba(37,244,238,0.06);
+    }
+
+    .option-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .option-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .option-icon.following { background: rgba(37,244,238,0.15); }
+    .option-icon.friend { background: rgba(254,44,85,0.15); }
+
+    .option-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--tt-text);
+    }
+
+    .option-desc {
+      font-size: 11px;
+      color: var(--tt-muted);
+      margin-top: 1px;
+    }
+
+    /* Toggle */
+    .toggle {
+      width: 36px;
+      height: 20px;
+      background: var(--tt-dim);
+      border-radius: 10px;
+      position: relative;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .toggle.on { background: var(--tt-cyan); }
+    .toggle.on.pink { background: var(--tt-pink); }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: white;
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: left 0.2s;
+    }
+
+    .toggle.on::after { left: 19px; }
+
+    /* Speed */
+    .speed-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--tt-card);
+      border: 1px solid var(--tt-border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      margin-bottom: 14px;
+    }
+
+    .speed-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .speed-label span { font-size: 13px; font-weight: 500; }
+    .speed-desc { font-size: 11px; color: var(--tt-muted); display: block; }
+
+    .speed-pills {
+      display: flex;
+      gap: 4px;
+    }
+
+    .pill {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid var(--tt-border);
+      background: transparent;
+      color: var(--tt-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .pill.active {
+      background: var(--tt-cyan);
+      color: var(--tt-dark);
+      border-color: var(--tt-cyan);
+    }
+
+    /* Stats bar */
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .stat {
+      background: var(--tt-card);
+      border: 1px solid var(--tt-border);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      text-align: center;
+    }
+
+    .stat-val {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--tt-text);
+      line-height: 1;
+    }
+
+    .stat-val.cyan { color: var(--tt-cyan); }
+    .stat-val.pink { color: var(--tt-pink); }
+
+    .stat-name {
+      font-size: 10px;
+      color: var(--tt-muted);
+      margin-top: 3px;
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+      background: var(--tt-card);
+      border: 1px solid var(--tt-border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      margin-bottom: 14px;
+    }
+
+    .progress-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .progress-label {
+      font-size: 12px;
+      color: var(--tt-muted);
+    }
+
+    .progress-pct {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tt-cyan);
+    }
+
+    .bar-bg {
+      height: 4px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--tt-cyan), #7df9f5);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    /* Status */
+    .status-msg {
+      font-size: 12px;
+      color: var(--tt-muted);
+      text-align: center;
+      min-height: 16px;
+      margin-bottom: 14px;
+      padding: 0 4px;
+      line-height: 1.4;
+      transition: color 0.2s;
+    }
+
+    .status-msg.loading { color: var(--tt-cyan); }
+    .status-msg.done { color: #7dff8a; }
+    .status-msg.error { color: var(--tt-pink); }
+
+    /* Main button */
+    .main-btn {
+      width: 100%;
+      height: 44px;
+      border: none;
+      border-radius: var(--radius);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: opacity 0.2s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: var(--tt-cyan);
+      color: var(--tt-dark);
+    }
+
+    .main-btn:hover { opacity: 0.9; }
+    .main-btn:active { transform: scale(0.98); }
+
+    .main-btn:disabled {
+      background: var(--tt-card);
+      color: var(--tt-dim);
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .main-btn.running {
+      background: var(--tt-surface);
+      color: var(--tt-pink);
+      border: 1px solid rgba(254,44,85,0.3);
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(254,44,85,0.3);
+      border-top-color: var(--tt-pink);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Footer */
+    .footer {
+      padding: 10px 16px;
+      border-top: 1px solid var(--tt-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .footer span {
+      font-size: 10px;
+      color: var(--tt-dim);
+    }
+
+    .dot {
+      width: 3px;
+      height: 3px;
+      background: var(--tt-dim);
+      border-radius: 50%;
+    }
+
+    /* Phase tag */
+    .phase {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      letter-spacing: 0.2px;
+    }
+    .phase.idle { background: rgba(255,255,255,0.06); color: var(--tt-muted); }
+    .phase.scrolling { background: rgba(37,244,238,0.12); color: var(--tt-cyan); }
+    .phase.scanning { background: rgba(255,165,0,0.12); color: #ffaa00; }
+    .phase.unfollowing { background: rgba(254,44,85,0.12); color: var(--tt-pink); }
+    .phase.done { background: rgba(125,255,138,0.12); color: #7dff8a; }
+
+    .phase-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .phase.unfollowing .phase-dot {
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
     }
   </style>
 </head>
 <body>
-  <div class="options">
-    <label class="option-label">
-      <input type="checkbox" id="unfollowFollowing" checked>
-      <span>Unfollow "Following"</span>
-    </label>
-    <label class="option-label">
-      <input type="checkbox" id="unfollowFriend">
-      <span>Unfollow "Friend"</span>
-    </label>
+
+  <div class="header">
+    <div class="logo">
+      <div class="logo-shape cyan"></div>
+      <div class="logo-shape pink"></div>
+      <div class="logo-shape dark">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.31 6.31 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.76a4.85 4.85 0 0 1-1.01-.07Z"/>
+        </svg>
+      </div>
+    </div>
+    <div class="header-text">
+      <h1>Auto Unfollow</h1>
+      <p>TikTok bulk manager</p>
+    </div>
+    <div class="badge" id="phaseBadge">
+      <span class="phase idle"><span class="phase-dot"></span>idle</span>
+    </div>
   </div>
 
-  <button id="unfollowBtn">Start Auto Unfollow</button>
-  <div id="status">Ready</div>
-  <div id="details"></div>
+  <div class="body">
+
+    <div class="section-label">What to unfollow</div>
+    <div class="options">
+      <div class="option active" id="opt-following" onclick="toggleOption('following')">
+        <div class="option-left">
+          <div class="option-icon following">💚</div>
+          <div>
+            <div class="option-name">Following</div>
+            <div class="option-desc">Accounts you follow</div>
+          </div>
+        </div>
+        <div class="toggle on" id="tog-following"></div>
+      </div>
+      <div class="option" id="opt-friend" onclick="toggleOption('friend')">
+        <div class="option-left">
+          <div class="option-icon friend">🫂</div>
+          <div>
+            <div class="option-name">Friends</div>
+            <div class="option-desc">Mutual follows</div>
+          </div>
+        </div>
+        <div class="toggle" id="tog-friend"></div>
+      </div>
+    </div>
+
+    <div class="section-label">Speed</div>
+    <div class="speed-row" style="margin-bottom:14px">
+      <div class="speed-label">
+        <span>Delay between actions</span>
+      </div>
+      <div class="speed-pills">
+        <button class="pill" onclick="setSpeed(800)" data-speed="800">Safe</button>
+        <button class="pill active" onclick="setSpeed(1500)" data-speed="1500">Balanced</button>
+        <button class="pill" onclick="setSpeed(3000)" data-speed="3000">Slow</button>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-val" id="statTotal">—</div>
+        <div class="stat-name">Found</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val cyan" id="statDone">0</div>
+        <div class="stat-name">Unfollowed</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val pink" id="statFriend">0</div>
+        <div class="stat-name">Friends</div>
+      </div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-top">
+        <span class="progress-label" id="progressLabel">Waiting to start</span>
+        <span class="progress-pct" id="progressPct">0%</span>
+      </div>
+      <div class="bar-bg">
+        <div class="bar-fill" id="barFill"></div>
+      </div>
+    </div>
+
+    <div class="status-msg" id="statusMsg">Select options and click Start</div>
+
+    <button class="main-btn" id="mainBtn">
+      <span id="btnText">Start Auto Unfollow</span>
+    </button>
+
+  </div>
+
+  <div class="footer">
+    <span>2s delay</span>
+    <div class="dot"></div>
+    <span>TikTok-safe</span>
+    <div class="dot"></div>
+    <span>local only</span>
+  </div>
 
   <script src="popup.js"></script>
 </body>

@@ -1,247 +1,289 @@
-// Listen for messages from popup
+// ─── State ────────────────────────────────────────────────────────────────────
+let currentDelay = 1500;
+let isRunning = false;
+
+// ─── Message listener ─────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'startUnfollow') {
+    if (isRunning) {
+      sendResponse({ success: false, error: 'Already running' });
+      return false;
+    }
+    if (request.delay) currentDelay = request.delay;
+
+    isRunning = true;
     autoUnfollow(request.unfollowFollowing, request.unfollowFriend)
       .then((result) => {
-        // result: { success, count, message }
-        if (result && result.success) {
-          sendResponse({ success: true, message: result.message, count: result.count });
-        } else {
-          sendResponse({ success: false, error: result?.message || 'Unknown' });
-        }
+        isRunning = false;
+        sendResponse(result);
       })
       .catch((error) => {
+        isRunning = false;
         sendResponse({ success: false, error: error.message });
       });
-    return true; // Keep the channel open for async response
+    return true;
+  }
+
+  if (request.action === 'setSpeed') {
+    currentDelay = request.delay;
   }
 });
 
-// Auto-scroll to load all followers
-async function autoScrollToLoadAll(maxScrolls = 50, scrollDelay = 500) {
-  // Find the scrollable container (TikTok's following list is usually in a modal or div)
-  let scrollContainer = null;
+// ─── Messaging helpers ────────────────────────────────────────────────────────
+function send(msg) {
+  try { chrome.runtime.sendMessage(msg); } catch (_) {}
+}
 
-  // Try TikTok-specific data-e2e selectors first (most reliable)
-  const tikTokSelectors = [
-    '[data-e2e="scroll-list"]',           // TikTok scroll list
-    '[data-e2e="recommended-user-list"]', // Recommended users list
-    '[data-e2e="search-user-list"]',      // Search user list
-    '[data-e2e="follow-info-popup"]',     // Follow info popup
-  ];
+// ─── Scroll to load all accounts ──────────────────────────────────────────────
+async function autoScrollToLoadAll(maxScrolls = 60, delay = 400) {
+  send({ action: 'phase', phase: 'scrolling', message: 'Scrolling to load all accounts...' });
 
-  // Try common selectors for the scrollable container
-  const containerSelectors = [
-    '[role="dialog"]',           // Modal container
-    '[role="listbox"]',          // Listbox
-    '.tiktok-modal',             // TikTok modal
-    '[class*="modal"]',          // Any element with "modal" in class
-    '[class*="scroll"]',         // Any element with "scroll" in class
-    'div[style*="overflow"]',    // Divs with overflow CSS
-  ];
+  // Find the deepest scrollable container visible in the viewport
+  function findScrollContainer() {
+    const selectors = [
+      '[data-e2e="follow-info-popup"]',
+      '[data-e2e="scroll-list"]',
+      '[data-e2e="recommended-user-list"]',
+      '[role="dialog"]',
+      '[class*="DivUserListWrapper"]',
+      '[class*="follower"]',
+      '[class*="following"]',
+      '[class*="modal"]',
+      '[class*="scroll"]',
+    ];
 
-  // Combine all selectors (TikTok-specific first)
-  const allSelectors = [...tikTokSelectors, ...containerSelectors];
-
-  // Try to find a container that has scrollHeight > clientHeight
-  for (const selector of allSelectors) {
-    try {
-      const elements = document.querySelectorAll(selector);
-      for (const el of elements) {
-        if (el.scrollHeight > el.clientHeight) {
-          scrollContainer = el;
-          console.log('Found scrollable container with selector:', selector);
-          break;
-        }
-      }
-      if (scrollContainer) break;
-    } catch (e) {
-      // ignore invalid selectors
+    for (const sel of selectors) {
+      try {
+        const els = [...document.querySelectorAll(sel)];
+        const scrollable = els.find(el => el.scrollHeight > el.clientHeight + 10);
+        if (scrollable) return scrollable;
+      } catch (_) {}
     }
+
+    // Fallback: walk DOM for scrollable divs
+    const all = document.querySelectorAll('div');
+    for (const el of all) {
+      const style = window.getComputedStyle(el);
+      const overflow = style.overflowY;
+      if ((overflow === 'scroll' || overflow === 'auto') && el.scrollHeight > el.clientHeight + 20) {
+        return el;
+      }
+    }
+
+    return null;
   }
 
-  // Fallback: if no container found, try scrolling the window
-  if (!scrollContainer) {
-    scrollContainer = window;
-    console.log('No modal container found, using window scroll');
-  } else {
-    console.log('Found scrollable container:', scrollContainer.className || scrollContainer.tagName, scrollContainer.getAttribute('data-e2e'));
-  }
-
+  const container = findScrollContainer();
   let scrollCount = 0;
-  let lastHeight = scrollContainer === window ? document.documentElement.scrollHeight : scrollContainer.scrollHeight;
+  let stableCount = 0;
+  const STABLE_THRESHOLD = 3; // stop if height hasn't changed for 3 iterations
 
   return new Promise((resolve) => {
-    const scrollInterval = setInterval(() => {
-      if (scrollContainer === window) {
-        // Scroll the window
-        window.scrollTo(0, document.documentElement.scrollHeight);
+    let lastHeight = container ? container.scrollHeight : document.documentElement.scrollHeight;
+
+    const tick = () => {
+      if (container) {
+        container.scrollTop = container.scrollHeight;
       } else {
-        // Scroll the container
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        window.scrollTo(0, document.documentElement.scrollHeight);
       }
 
       scrollCount++;
 
-      // Check if we've reached the end or max scrolls
-      const newHeight = scrollContainer === window ? document.documentElement.scrollHeight : scrollContainer.scrollHeight;
-      if (newHeight === lastHeight || scrollCount >= maxScrolls) {
-        clearInterval(scrollInterval);
-        console.log(`Finished scrolling after ${scrollCount} scrolls. Total height: ${newHeight}`);
-        resolve();
-        return;
-      }
+      setTimeout(() => {
+        const newHeight = container ? container.scrollHeight : document.documentElement.scrollHeight;
 
-      lastHeight = newHeight;
-    }, scrollDelay);
+        if (newHeight === lastHeight) {
+          stableCount++;
+        } else {
+          stableCount = 0;
+          lastHeight = newHeight;
+        }
+
+        if (stableCount >= STABLE_THRESHOLD || scrollCount >= maxScrolls) {
+          resolve(container);
+        } else {
+          tick();
+        }
+      }, delay);
+    };
+
+    tick();
   });
 }
 
-async function autoUnfollow(unfollowFollowing = true, unfollowFriend = false) {
-  // First, send a message to the popup indicating we're scrolling
-  try { chrome.runtime.sendMessage({ action: 'progress', message: 'Loading all followers...' }); } catch (e) {}
+// ─── Wait for a confirmation dialog and dismiss it ────────────────────────────
+function dismissConfirmDialog(timeout = 2000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
 
-  // Auto-scroll to load all followers
-  console.log('Starting auto-scroll to load all followers...');
-  await autoScrollToLoadAll(50, 500);
+    const check = () => {
+      // TikTok's unfollow confirm button selectors
+      const confirmSelectors = [
+        '[data-e2e="confirm-unfollow-btn"]',
+        'button[class*="Confirm"]',
+        '[class*="confirm"] button',
+        '[class*="Unfollow"] button',
+      ];
 
-  console.log('Scroll complete. Now scanning for unfollow buttons...');
+      for (const sel of confirmSelectors) {
+        try {
+          const btn = document.querySelector(sel);
+          if (btn && btn.innerText && btn.innerText.trim().length > 0) {
+            btn.click();
+            resolve(true);
+            return;
+          }
+        } catch (_) {}
+      }
 
-  // Build a list of candidate selectors (covers various TikTok DOM variations)
-  const selectors = [
-    'button[data-e2e*="follow"]',
-    '[data-e2e*="follow"]',
-    'button[aria-label*="Follow"]',
-    'button[aria-label*="Following"]',
-    'button',
-    '[role="button"]'
-  ];
-
-  const seen = new Set();
-  const candidates = [];
-
-  selectors.forEach(sel => {
-    try {
-      document.querySelectorAll(sel).forEach(el => {
-        if (!seen.has(el) && el instanceof Element) {
-          seen.add(el);
-          candidates.push(el);
+      // Also look for any visible button with "Unfollow" text in a dialog
+      const allBtns = [...document.querySelectorAll('button')];
+      for (const btn of allBtns) {
+        const text = (btn.innerText || btn.textContent || '').trim().toLowerCase();
+        if (text === 'unfollow' && btn.getBoundingClientRect().width > 0) {
+          btn.click();
+          resolve(true);
+          return;
         }
-      });
-    } catch (e) {
-      // ignore malformed selectors
-    }
+      }
+
+      if (Date.now() - start < timeout) {
+        setTimeout(check, 100);
+      } else {
+        resolve(false);
+      }
+    };
+
+    setTimeout(check, 300);
   });
+}
 
-  // Helper: is element visible
-  function isVisible(el) {
-    const rect = el.getBoundingClientRect();
-    return !!(rect.width || rect.height) && window.getComputedStyle(el).visibility !== 'hidden' && el.offsetParent !== null;
-  }
-
-  // Filter candidates by text and track type separately
+// ─── Collect follow buttons ────────────────────────────────────────────────────
+function collectButtons(unfollowFollowing, unfollowFriend) {
+  const seen = new Set();
   const followingButtons = [];
   const friendButtons = [];
 
-  candidates.forEach(el => {
+  function isVisible(el) {
     try {
-      if (!isVisible(el)) return;
-      const text = (el.innerText || el.textContent || '').trim().toLowerCase();
-      
-      // Check if we should include this button based on checkbox settings
-      const hasFollowing = text.includes('following') || text.includes('unfollow');
-      const hasFriend = text.includes('friends') || text.includes('friend') || text.includes('remove');
-      
-      if (unfollowFollowing && hasFollowing) followingButtons.push(el);
-      else if (unfollowFriend && hasFriend) friendButtons.push(el);
-    } catch (e) {
-      // ignore
+      const rect = el.getBoundingClientRect();
+      if (!rect.width && !rect.height) return false;
+      const style = window.getComputedStyle(el);
+      return style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0';
+    } catch (_) {
+      return false;
     }
-  });
-
-  // Combine buttons
-  const buttons = [...followingButtons, ...friendButtons];
-
-  console.log('Candidate elements found:', candidates.length);
-  console.log('Following buttons found:', followingButtons.length);
-  console.log('Friend buttons found:', friendButtons.length);
-  console.log('Total filtered unfollow buttons:', buttons.length);
-
-  if (buttons.length === 0) {
-    return { success: false, count: 0, message: 'No following/unfollow buttons found on this page.' };
   }
 
-  // Send a message showing total found before starting unfollows
-  try { 
-    chrome.runtime.sendMessage({ 
-      action: 'totalFound', 
-      count: buttons.length, 
-      candidates: candidates.length,
-      followingCount: followingButtons.length,
-      friendCount: friendButtons.length
-    }); 
-  } catch (e) {}
+  // Broad selector sweep
+  const selectors = [
+    '[data-e2e*="follow"]',
+    'button[aria-label*="follow" i]',
+    'button[aria-label*="following" i]',
+    'button[aria-label*="friend" i]',
+    'button',
+    '[role="button"]',
+  ];
 
-  let i = 0;
+  for (const sel of selectors) {
+    try {
+      document.querySelectorAll(sel).forEach(el => {
+        if (seen.has(el) || !(el instanceof Element)) return;
+        seen.add(el);
+
+        if (!isVisible(el)) return;
+
+        const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+        const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+        const combined = text + ' ' + ariaLabel;
+
+        const isFollowing = /\bfollowing\b|\bunfollow\b/.test(combined);
+        const isFriend = /\bfriend(s)?\b|\bremove\b/.test(combined) && !isFollowing;
+
+        if (unfollowFollowing && isFollowing) followingButtons.push(el);
+        else if (unfollowFriend && isFriend) friendButtons.push(el);
+      });
+    } catch (_) {}
+  }
+
+  return { followingButtons, friendButtons };
+}
+
+// ─── Main unfollow routine ─────────────────────────────────────────────────────
+async function autoUnfollow(unfollowFollowing = true, unfollowFriend = false) {
+  // Step 1: Scroll
+  await autoScrollToLoadAll(60, 400);
+
+  // Step 2: Scan
+  send({ action: 'phase', phase: 'scanning', message: 'Scanning for follow buttons...' });
+  await sleep(500);
+
+  const { followingButtons, friendButtons } = collectButtons(unfollowFollowing, unfollowFriend);
+  const buttons = [...followingButtons, ...friendButtons];
+
+  if (buttons.length === 0) {
+    send({ action: 'phase', phase: 'error', message: 'No follow buttons found. Are you on the Following tab?' });
+    return { success: false, count: 0, message: 'No buttons found.' };
+  }
+
+  send({
+    action: 'totalFound',
+    count: buttons.length,
+    followingCount: followingButtons.length,
+    friendCount: friendButtons.length
+  });
+
+  // Step 3: Unfollow
   let followingUnfollowed = 0;
   let friendUnfollowed = 0;
 
-  return new Promise((resolve) => {
-    function clickNext() {
-      if (i >= buttons.length) {
-        console.log('Finished unfollowing all available users.');
-        // Notify popup that we're done
-        try { 
-          chrome.runtime.sendMessage({ 
-            action: 'done', 
-            count: buttons.length,
-            followingCount: followingUnfollowed,
-            friendCount: friendUnfollowed
-          }); 
-        } catch (e) {}
+  for (let i = 0; i < buttons.length; i++) {
+    const btn = buttons[i];
 
-        resolve({ success: true, count: buttons.length, message: 'Unfollowing complete.' });
-        return;
-      }
+    // Skip if button is no longer in DOM or text changed (already unfollowed)
+    if (!document.contains(btn)) continue;
+    const currentText = (btn.innerText || btn.textContent || '').trim().toLowerCase();
+    if (!currentText || currentText === 'follow') continue;
 
-      const btn = buttons[i];
-      const text = (btn.innerText || btn.textContent || '').trim();
-      console.log('Unfollowing:', text);
+    const isFollowingBtn = i < followingButtons.length;
 
-      // Determine if this is a following or friend button
-      const isFollowing = i < followingButtons.length;
-      if (isFollowing) {
-        followingUnfollowed++;
-      } else {
-        friendUnfollowed++;
-      }
-
-      // Try clicking in a safe way
+    try {
+      btn.click();
+    } catch (_) {
       try {
-        btn.click();
-      } catch (e) {
-        // fallback: dispatch mouse events
-        btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-        btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-        btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      }
-
-      i++;
-
-      // Send progress update to popup (with separate counts)
-      try { 
-        chrome.runtime.sendMessage({ 
-          action: 'progress', 
-          count: i,
-          followingCount: followingUnfollowed,
-          friendCount: friendUnfollowed
-        }); 
-      } catch (e) {}
-
-      // Delay 2 seconds between clicks
-      setTimeout(clickNext, 2000);
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      } catch (_) {}
     }
 
-    clickNext();
+    // Handle potential confirm dialog (TikTok sometimes shows one)
+    await dismissConfirmDialog(1500);
+
+    if (isFollowingBtn) followingUnfollowed++;
+    else friendUnfollowed++;
+
+    send({
+      action: 'progress',
+      count: i + 1,
+      followingCount: followingUnfollowed,
+      friendCount: friendUnfollowed
+    });
+
+    await sleep(currentDelay);
+  }
+
+  const total = followingUnfollowed + friendUnfollowed;
+  send({
+    action: 'done',
+    count: total,
+    followingCount: followingUnfollowed,
+    friendCount: friendUnfollowed
   });
+
+  return { success: true, count: total, message: 'Done.' };
+}
+
+// ─── Utility ──────────────────────────────────────────────────────────────────
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
 }
