@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "TikTok Auto Unfollow Pro",
-  "version": "2.0",
-  "description": "High-speed, stable TikTok unfollower with a native dark UI.",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "name": "TikTok Auto Unfollow",
+  "version": "1.0",
+  "description": "Automatically unfollow users on TikTok one by one.",
+  "permissions": ["activeTab", "scripting"],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_title": "TikTok Auto Unfollow"
   },
   "content_scripts": [
     {
